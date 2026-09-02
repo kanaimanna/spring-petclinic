@@ -1,3 +1,4 @@
+```groovy
 pipeline {
     agent any
 
@@ -8,16 +9,12 @@ pipeline {
 
     environment {
         APP_NAME = 'petclinic'
-        APP_PORT = '8081'
+        TOMCAT_HOME = '/opt/tomcat'
+        TOMCAT_PORT = '8082'
+        WAR_NAME = 'petclinic.war'
     }
 
     stages {
-
-        stage('Checkout') {
-            steps {
-                git branch: 'main', url: 'https://github.com/kanaimanna/spring-petclinic.git'
-            }
-        }
 
         stage('Build with Maven') {
             steps {
@@ -31,33 +28,38 @@ pipeline {
             }
         }
 
-        stage('Run Application') {
+        stage('Deploy to Tomcat') {
             steps {
                 sh '''
-                    # Stop any previous instance running on APP_PORT
-                    fuser -k ${APP_PORT}/tcp || true
-                    sleep 2
+                    echo "Deploying ${APP_NAME} to Tomcat..."
 
-                    # Prevent Jenkins from killing this process once the build step ends.
-                    # Both variables must be unset - newer Jenkins uses JENKINS_NODE_COOKIE,
-                    # older versions use BUILD_ID.
-                    export BUILD_ID=dontKillMe
-                    export JENKINS_NODE_COOKIE=dontKillMe
+                    # Remove previous deployment
+                    sudo rm -rf ${TOMCAT_HOME}/webapps/${APP_NAME}
+                    sudo rm -f ${TOMCAT_HOME}/webapps/${WAR_NAME}
 
-                    # setsid fully detaches the process into its own session, so it survives
-                    # even if Jenkins tries to kill the whole process group.
-                    # (no 'disown' here - it's a bash builtin, not available in Jenkins' /bin/sh)
-                    setsid nohup java -jar target/*.jar --server.port=${APP_PORT} > app.log 2>&1 < /dev/null &
+                    # Copy new WAR
+                    sudo cp target/*.war ${TOMCAT_HOME}/webapps/${WAR_NAME}
 
+                    # Set ownership
+                    sudo chown tomcat:tomcat ${TOMCAT_HOME}/webapps/${WAR_NAME}
+
+                    echo "Restarting Tomcat..."
+                    sudo systemctl restart tomcat
+
+                    echo "Waiting for Tomcat..."
                     sleep 15
 
-                    echo "Checking if the application actually started..."
-                    if ss -tulpn | grep -q ":${APP_PORT}"; then
-                        echo "SUCCESS: Application is listening on port ${APP_PORT}"
-                    else
-                        echo "WARNING: Nothing is listening on port ${APP_PORT} yet. Log so far:"
-                    fi
-                    tail -n 30 app.log
+                    echo "Checking Tomcat status..."
+                    sudo systemctl is-active --quiet tomcat
+
+                    echo "Checking PetClinic application..."
+                    curl -f http://localhost:${TOMCAT_PORT}/${APP_NAME}/
+
+                    echo "========================================="
+                    echo "Deployment successful!"
+                    echo "Application: ${APP_NAME}"
+                    echo "URL: http://SERVER-IP:${TOMCAT_PORT}/${APP_NAME}/"
+                    echo "========================================="
                 '''
             }
         }
@@ -65,10 +67,12 @@ pipeline {
 
     post {
         success {
-            echo "Build #${env.BUILD_NUMBER} succeeded. ${APP_NAME} is running on port ${APP_PORT}."
+            echo "Build #${env.BUILD_NUMBER} succeeded. ${APP_NAME} deployed successfully to Tomcat."
         }
+
         failure {
-            echo "Build #${env.BUILD_NUMBER} failed. Check the console output above for details."
+            echo "Build #${env.BUILD_NUMBER} failed. Check the console output above."
         }
     }
 }
+```
