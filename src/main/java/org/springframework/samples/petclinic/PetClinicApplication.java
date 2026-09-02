@@ -25,6 +25,7 @@ import org.springframework.context.annotation.ImportRuntimeHints;
  *
  * @author Dave Syer
  */
+/**
 @SpringBootApplication
 @ImportRuntimeHints(PetClinicRuntimeHints.class)
 public class PetClinicApplication {
@@ -32,5 +33,19 @@ public class PetClinicApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(PetClinicApplication.class, args);
 	}
+
+}
+*/
+@SpringBootApplication
+public class PetClinicApplication extends SpringBootServletInitializer {
+
+    @Override
+    protected SpringApplicationBuilder configure(SpringApplicationBuilder application) {
+        return application.sources(PetClinicApplication.class);
+    }
+
+    public static void main(String[] args) {
+        SpringApplication.run(PetClinicApplication.class, args);
+    }
 
 }
